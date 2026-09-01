@@ -11,7 +11,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/files"
+#: Resolved through the API rather than a URL template, because model versions move.
+ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/api/prediction/{accession}"
 
 #: Residues below this pLDDT are treated as unresolved. 70 is the conventional boundary
 #: between "confident" and "low"; the value used is written into results/findings.json
@@ -45,9 +46,6 @@ def confident_fraction(plddt: Sequence[float], *, threshold: float = PLDDT_CONFI
     if not plddt:
         raise ValueError("cannot summarise an empty pLDDT array")
     return sum(1 for score in plddt if score >= threshold) / len(plddt)
-
-
-ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/api/prediction/{accession}"
 
 
 def fetch_structure(uniprot_id: str, out_dir: Path) -> Path:
