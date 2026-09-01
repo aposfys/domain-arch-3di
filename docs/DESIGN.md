@@ -44,3 +44,36 @@ families — recombination that produces genuinely novel multidomain architectur
   a template-based prediction of a close homologue, its 3Di adds no information while
   looking like a second character set. Predicted structures are checked for template
   leakage before being treated as independent.
+
+## Two things that would have gone wrong quietly
+
+- **AlphaFold model versions move.** The `v4` URL template that was current when
+  this repo was designed now returns `NoSuchKey`, and a hardcoded template fills
+  the cache with 127-byte XML error documents that Foldseek then fails on for an
+  unrelated-looking reason. Download URLs are resolved through the API, and a
+  payload under 1 kB is rejected as not-a-model.
+- **A masked residue is not a letter.** pLDDT masking replaces low-confidence
+  residues with `X`; any *k*-mer window touching one is dropped rather than
+  counted, because counting `X`-containing k-mers turns disordered regions into
+  their own signal — the exact artefact the masking exists to remove. A test pins
+  it.
+
+Proteins whose AlphaFold model length disagrees with their UniProt sequence are
+excluded rather than aligned by position, and proteins below 50% confident
+residues are excluded as a first-class step with the exclusions reported.
+
+## Layout
+
+```
+src/domarch/
+  data.py           UniProt clades and InterPro domain architectures
+  structure.py      AlphaFold retrieval, 3Di encoding, pLDDT masking
+  architecture.py   rearrangement event classification
+  trees.py          k-mer distances, neighbour joining, splits, cherries
+  compare.py        event-level comparison between the two trees
+  analysis.py       the whole run
+  report.py         results rendering
+  cli.py            fetch / analysis / report
+```
+
+27 tests, none needing a network or a structure.
