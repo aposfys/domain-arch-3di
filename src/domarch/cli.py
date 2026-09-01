@@ -45,6 +45,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    try:
+        return _dispatch(args)
+    except RuntimeError as exc:
+        # Missing Foldseek, too few usable models: expected, and reported with the fix.
+        raise SystemExit(str(exc)) from exc
+    except OSError as exc:
+        raise SystemExit(f"could not reach UniProt/InterPro/AlphaFold: {exc}") from exc
+
+
+def _dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "fetch":
         from domarch.data import build_dataset
@@ -74,7 +84,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "report":
         from domarch.report import write
 
-        out = write(args.results_dir / "findings.json", args.results_dir / "RESULTS.md")
+        findings = args.results_dir / "findings.json"
+        if not findings.exists():
+            raise SystemExit(f"no findings at {findings}. Run 'domarch analysis' first.")
+        out = write(findings, args.results_dir / "RESULTS.md")
         print(f"wrote {out}")
         return 0
 

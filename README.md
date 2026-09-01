@@ -60,9 +60,10 @@ src/domarch/
   cli.py            fetch / analysis / report
 ```
 
-24 tests, none needing a network or a structure.
+27 tests, none needing a network or a structure.
 
 ### More
 
+- [Analysis: what was done, and why it was done that way](ANALYSIS.md)
 - [Full results](results/RESULTS.md)
 - [Where the field disagrees with itself, and the traps this pipeline avoids](docs/DESIGN.md)

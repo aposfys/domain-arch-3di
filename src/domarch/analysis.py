@@ -34,6 +34,30 @@ def foldseek_binary() -> str:
     return os.environ.get("FOLDSEEK_BIN") or shutil.which("foldseek") or "foldseek"
 
 
+def check_foldseek(binary: str) -> None:
+    """Fail immediately if Foldseek cannot run.
+
+    Without this the missing binary is discovered once per protein, every protein is
+    skipped for the same reason, and the run dies complaining about having too few
+    proteins for a tree -- which is true, and says nothing about the actual cause.
+    """
+    import subprocess
+
+    try:
+        completed = subprocess.run(
+            [binary, "version"], capture_output=True, text=True, timeout=60, check=False
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            f"foldseek is not runnable as {binary!r}: {exc}\n"
+            "Install it, or point FOLDSEEK_BIN at the binary:\n"
+            "  curl -L https://mmseqs.com/foldseek/foldseek-osx-universal.tar.gz | tar xz\n"
+            "  export FOLDSEEK_BIN=$PWD/foldseek/bin/foldseek"
+        ) from exc
+    if completed.returncode != 0:
+        raise RuntimeError(f"foldseek at {binary!r} exited {completed.returncode}")
+
+
 def run(
     data_dir: Path,
     results_dir: Path,
@@ -47,6 +71,7 @@ def run(
     proteins = build_dataset(data_dir / "dataset.json", per_clade=per_clade)
 
     binary = foldseek_binary()
+    check_foldseek(binary)
     usable: list[Encoded] = []
     skipped: dict[str, str] = {}
     for protein in proteins:
@@ -92,7 +117,13 @@ def run(
         )
 
     if len(usable) < 4:
-        raise RuntimeError(f"only {len(usable)} usable proteins; need at least 4 for a tree")
+        reasons = ", ".join(sorted({r.split(":")[0] for r in skipped.values()})) or "none"
+        raise RuntimeError(
+            f"only {len(usable)} usable proteins; need at least 4 for a tree.\n"
+            f"{len(skipped)} were skipped. Reasons seen: {reasons}.\n"
+            "See results/findings.json from a previous run, or lower "
+            "--min-confident-fraction if the models are genuinely low confidence."
+        )
 
     names = [row.protein.accession for row in usable]
     architectures = {row.protein.accession: row.protein.architecture for row in usable}
