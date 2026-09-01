@@ -1,0 +1,67 @@
+{
+ "configuration": {
+  "clades": [
+   {
+    "clade": "transporter",
+    "interpro": "IPR020846",
+    "description": "Major facilitator superfamily domain"
+   },
+   {
+    "clade": "globular",
+    "interpro": "IPR001254",
+    "description": "Serine protease, trypsin domain"
+   }
+  ],
+  "per_clade_requested": 30,
+  "plddt_threshold": 70.0,
+  "min_confident_fraction": 0.5,
+  "distance": "alignment-free 3-mer cosine, identical for both alphabets",
+  "tree": "neighbour joining (Biopython)"
+ },
+ "dataset": {
+  "usable": 58,
+  "skipped": 2,
+  "skipped_reasons": {
+   "Q8NCK7": "length mismatch: 447 residues in UniProt, 471 in the model",
+   "P08519": "only 49% of residues above pLDDT 70"
+  },
+  "per_clade": {
+   "transporter": 29,
+   "globular": 29
+  },
+  "architectures_empty": 0,
+  "distinct_architectures": 20
+ },
+ "topology": {
+  "robinson_foulds": 80,
+  "robinson_foulds_normalised": 0.7273
+ },
+ "events": {
+  "n_cherries_sequence": 21,
+  "n_cherries_structure": 18,
+  "shared_cherries": 9,
+  "events_sequence": {
+   "COMPLEX": 7,
+   "IDENTITY": 10,
+   "INTERNAL_DELETION": 1,
+   "TERMINAL_ADDITION": 3
+  },
+  "events_structure": {
+   "COMPLEX": 3,
+   "IDENTITY": 13,
+   "INTERNAL_DELETION": 1,
+   "TERMINAL_ADDITION": 1
+  },
+  "conflicting_shared_cherries": 0,
+  "events_only_in_sequence": {
+   "COMPLEX": 6,
+   "IDENTITY": 4,
+   "TERMINAL_ADDITION": 2
+  },
+  "events_only_in_structure": {
+   "COMPLEX": 2,
+   "IDENTITY": 7
+  },
+  "cherry_jaccard": 0.3
+ }
+}
