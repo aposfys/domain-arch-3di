@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from domarch.compare import compare_events
-from domarch.data import CLADES, build_dataset
+from domarch.data import CLADES, Protein, build_dataset
 from domarch.structure import (
     PLDDT_CONFIDENT,
     confident_fraction,
@@ -18,6 +18,16 @@ from domarch.structure import (
     mask_by_plddt,
 )
 from domarch.trees import cherries, distance_matrix, neighbour_joining, robinson_foulds
+
+
+@dataclass(frozen=True)
+class Encoded:
+    """One protein with both its character sets and its confidence."""
+
+    protein: Protein
+    amino_acids: str
+    three_di: str
+    confident_fraction: float
 
 
 def foldseek_binary() -> str:
@@ -37,7 +47,7 @@ def run(
     proteins = build_dataset(data_dir / "dataset.json", per_clade=per_clade)
 
     binary = foldseek_binary()
-    usable = []
+    usable: list[Encoded] = []
     skipped: dict[str, str] = {}
     for protein in proteins:
         try:
@@ -68,12 +78,12 @@ def run(
             continue
 
         usable.append(
-            {
-                "protein": protein,
-                "aa": protein.sequence,
-                "3di": mask_by_plddt(sequence_3di, plddt, threshold=plddt_threshold),
-                "confident_fraction": confident,
-            }
+            Encoded(
+                protein=protein,
+                amino_acids=protein.sequence,
+                three_di=mask_by_plddt(sequence_3di, plddt, threshold=plddt_threshold),
+                confident_fraction=confident,
+            )
         )
         print(
             f"  {protein.accession} {protein.clade:<12} "
@@ -84,11 +94,15 @@ def run(
     if len(usable) < 4:
         raise RuntimeError(f"only {len(usable)} usable proteins; need at least 4 for a tree")
 
-    names = [row["protein"].accession for row in usable]
-    architectures = {row["protein"].accession: row["protein"].architecture for row in usable}
+    names = [row.protein.accession for row in usable]
+    architectures = {row.protein.accession: row.protein.architecture for row in usable}
 
-    sequence_tree = neighbour_joining(distance_matrix(names, [row["aa"] for row in usable]))
-    structure_tree = neighbour_joining(distance_matrix(names, [row["3di"] for row in usable]))
+    sequence_tree = neighbour_joining(
+        distance_matrix(names, [row.amino_acids for row in usable])
+    )
+    structure_tree = neighbour_joining(
+        distance_matrix(names, [row.three_di for row in usable])
+    )
 
     rf_absolute, rf_normalised = robinson_foulds(sequence_tree, structure_tree)
     sequence_cherries = cherries(sequence_tree)
@@ -112,7 +126,7 @@ def run(
             "skipped": len(skipped),
             "skipped_reasons": skipped,
             "per_clade": {
-                clade: sum(1 for row in usable if row["protein"].clade == clade)
+                clade: sum(1 for row in usable if row.protein.clade == clade)
                 for clade, _, _ in CLADES
             },
             "architectures_empty": sum(1 for value in architectures.values() if not value),
