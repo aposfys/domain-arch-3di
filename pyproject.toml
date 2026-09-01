@@ -17,7 +17,13 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-dependencies = ["numpy>=1.24", "requests>=2.31"]
+# Biopython is a base dependency: neighbour joining and the AlphaFold PDB parsing are
+# both core, not optional analysis. Foldseek stays external -- it is a binary, not a wheel.
+dependencies = [
+    "numpy>=1.24",
+    "requests>=2.31",
+    "biopython>=1.83",
+]
 
 [project.optional-dependencies]
 bio = ["biopython>=1.80"]
