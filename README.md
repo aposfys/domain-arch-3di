@@ -54,6 +54,33 @@ sets differ and not enough to estimate rates. These are paralogues within one
 species, so the result is about how characters change an inference, not about the
 evolution of these families.
 
+### Prior work, and the method gap this leaves open
+
+Structural phylogenetics with Foldseek's 3Di alphabet (van Kempen et al., *Nature
+Biotechnology* 2022) is an active field, and two papers define its current standard:
+
+- Puente-Lelievre et al. (2024) — 3Di characters as standard phylogenetic characters, with
+  IQ-TREE maximum likelihood, a 3Di-specific rate matrix, partitioning, and ultrafast
+  bootstrap. Combining amino acids with 3Di best matches a reference structural-distance
+  tree and avoids long-branch attraction.
+- Fullmer et al. (2025) — 3Di combined with sequence resolves better than either alone, and
+  the gain is **weaker in alpha-helical proteins**, because high helical content reduces the
+  information 3Di alignments carry.
+
+**Both ask whether 3Di improves phylogenetic resolution. Neither asks whether it changes the
+downstream evolutionary events you read off the tree**, which is this repository's question
+and the reason it exists.
+
+Two caveats follow, and the second is the important one. Fullmer's alpha-helix result bears
+directly on the clades chosen here: MFS transporters are almost entirely helical, so this is
+close to the regime where 3Di carries least information. And the method used here — a shared
+alignment-free 3-mer cosine distance with neighbour-joining — is deliberately weaker than the
+field's, chosen so both alphabets pass through an identical step and no uncalibrated
+substitution matrix is compared against another. That control is worth having, but it means
+the event-set difference reported above cannot yet be separated from method noise. **Redoing
+this with model-based inference and bootstrap support is the next step, and until then the
+finding is a motivation rather than a result.**
+
 ### More
 
 - [Analysis](ANALYSIS.md) — what was done and why, including two failure modes that would have gone wrong quietly
