@@ -17,19 +17,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-# Biopython is a base dependency: neighbour joining and the AlphaFold PDB parsing are
-# both core, not optional analysis. Foldseek stays external -- it is a binary, not a wheel.
+# Biopython is the only runtime dependency. Neighbour joining and the AlphaFold PDB
+# parsing both use it, and HTTP goes through urllib. Foldseek stays external because it
+# is a binary, not a wheel.
 dependencies = [
-    "numpy>=1.24",
-    "requests>=2.31",
     "biopython>=1.83",
 ]
 
 [project.optional-dependencies]
-bio = ["biopython>=1.80"]
-trees = ["dendropy>=4.6", "ete3>=3.1"]
-figures = ["matplotlib>=3.7"]
-dev = ["pytest>=7.0", "numpy>=1.24", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=7.0", "ruff>=0.6", "mypy>=1.11"]
 
 [project.scripts]
 domarch = "domarch.cli:main"

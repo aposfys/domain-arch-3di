@@ -1,39 +1,33 @@
-.PHONY: install data encode trees analysis test clean clean-data all
+.PHONY: install data analysis report test clean clean-data all
 
 PYTHON ?= python3
-FAMILY ?= PF07690
-CONTROL ?= PF00042
+PER_CLADE ?= 30
 
 all: analysis
 
-## Install the package plus dev tooling. Foldseek comes from environment.yml:
-##   conda env create -f environment.yml && conda activate domarch
+## Install the package plus dev tooling. Foldseek is a separate binary, found on PATH or
+## through FOLDSEEK_BIN.
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
 
-## InterPro architectures and AlphaFold structures for the family and its control
+## UniProt sequences and InterPro domain architectures for both clades
 data:
-	$(PYTHON) -m domarch.cli fetch --family $(FAMILY) --control $(CONTROL)
+	$(PYTHON) -m domarch.cli fetch --per-clade $(PER_CLADE)
 
-## 3Di encoding, with low-pLDDT residues masked before anything downstream sees them
-encode: data
-	$(PYTHON) -m domarch.cli encode
+## AlphaFold models, 3Di, both trees, the event comparison and RESULTS.md
+analysis: data
+	$(PYTHON) -m domarch.cli analysis --per-clade $(PER_CLADE)
 
-## One tree per character set
-trees: encode
-	$(PYTHON) -m domarch.cli trees --characters aa 3di partitioned
-
-## Event-level comparison: which rearrangements change, and where they sit
-analysis: trees
-	$(PYTHON) -m domarch.cli compare
+## Re-render RESULTS.md from results/findings.json
+report:
+	$(PYTHON) -m domarch.cli report
 
 test:
 	$(PYTHON) -m pytest -q
 
 clean:
-	rm -rf results/*
 	find . -name __pycache__ -type d -exec rm -rf {} +
 
-## Also delete cached structures and architecture tables
+## Also delete the cached dataset and structures
 clean-data: clean
-	rm -f data/*.cif data/*.tsv data/*.fasta
+	rm -rf data/dataset.json data/structures
