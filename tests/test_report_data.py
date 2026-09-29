@@ -23,7 +23,7 @@ def test_committed_findings_render_with_undirected_events():
     assert "internal deletion" not in text
     assert "p = 0.19" in text
     assert "not significant" in text
-    assert "—" not in text
+    assert "\u2014" not in text
 
 
 def test_empty_architecture_line_only_appears_when_there_are_some():

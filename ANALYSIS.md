@@ -8,15 +8,16 @@ silent.
 Almost every large-scale reconstruction of domain-rearrangement history is built on amino
 acid sequence alone. Foldseek's 3Di alphabet turns a fold into a 20-letter string that
 existing phylogenetic software consumes unchanged. The question is not whether the trees
-differ — they will — but whether the inferred **rearrangement events** differ. A tree can be
-reshuffled substantially while every inferred gain, loss and duplication stays the same;
-that outcome would mean 3Di changes the phylogeny without changing the evolutionary story.
+differ, since they will, but whether the inferred **rearrangement events** differ. A tree
+can be reshuffled substantially while every inferred gain, loss and duplication stays the
+same, and that outcome would mean 3Di changes the phylogeny without changing the
+evolutionary story.
 
 ## Design decisions, and the reasoning
 
 **Both alphabets go through an identical method.** The same alignment-free 3-mer cosine
 distance, the same neighbour joining. A substitution-matrix alignment would need a 3Di
-matrix and an amino acid matrix calibrated against each other, and they are not — any
+matrix and an amino acid matrix calibrated against each other, and they are not. Any
 difference in the resulting trees would then be partly a difference between two matrices.
 Sharing one method removes that confound, at a cost in resolution which is stated rather
 than hidden.
@@ -25,19 +26,23 @@ Both alphabets have twenty letters, so the feature spaces are the same size and 
 advantaged by the representation.
 
 **A globular control clade.** MFS transporters are where rearrangement is claimed to be most
-active; trypsin-domain proteases are the control where a change would be harder to attribute
-to biology.
+active. Trypsin-domain proteases are the control, where a change would be harder to
+attribute to biology.
 
 **Events are read off cherries.** A sister pair is the one place two extant architectures
 can be compared without reconstructing an ancestor. Restricting to cherries keeps the
 comparison free of an ancestral-state model whose assumptions would otherwise be doing part
 of the work.
 
-**Architectures are ordered, not sets.** A terminal addition and an internal insertion are
+**Events have no direction.** Two sister paralogues have no ancestor-descendant order
+without an outgroup, so a gain in one reading is a loss in the other. Changes are classed
+as terminal indel, internal indel or complex, and never as an addition or a deletion.
+
+**Architectures are ordered, not sets.** A terminal indel and an internal indel are
 different events and a set cannot tell them apart, so domains are sorted by start position.
 
 **pLDDT masking is a first-class step.** Where AlphaFold is unconfident the backbone is a
-guess, so the 3Di letter is a guess about a guess — and disordered linkers, the regions this
+guess, so the 3Di letter is a guess about a guess. Disordered linkers, the regions this
 question most wants to discuss, are exactly the low-confidence ones. Masking is not a
 post-hoc robustness check.
 
@@ -50,10 +55,10 @@ actual problem. URLs are resolved through the API and a payload under 1 kB is re
 not-a-model.
 
 **A masked residue is not a letter.** Any *k*-mer window touching an `X` is dropped rather
-than counted. Counting `X`-containing k-mers turns disordered regions into their own signal
-— precisely the artefact masking exists to remove. A test pins it.
+than counted. Counting `X`-containing k-mers turns disordered regions into their own signal,
+which is precisely the artefact masking exists to remove. A test pins it.
 
-A third was added after the CLI review: **a missing Foldseek used to be discovered once per
+A third turned up while testing the CLI. **A missing Foldseek used to be discovered once per
 protein**, every protein was skipped for the same reason, and the run died complaining about
 having too few proteins for a tree. True, and silent about the cause. There is now a
 preflight check.
@@ -62,31 +67,29 @@ preflight check.
 
 58 human proteins (29 transporter, 29 globular), 20 distinct architectures.
 
-- **Robinson-Foulds 0.727 normalised.** About three-quarters of the bipartitions in one tree
-  are absent from the other.
-- **Events: 11 rearrangements from the sequence tree, 5 from the structure tree.** Only 9
-  sister pairs are shared (Jaccard 0.30).
+- **Robinson-Foulds 80, normalised 0.727.** Most of the non-trivial splits in one tree are
+  absent from the other. There is no bootstrap or resampling baseline for this number.
+- **Sister pairs.** Only 9 are shared between the two trees (Jaccard 0.30).
+- **Architecture changes across sister pairs.** 11 of 21 in the sequence tree and 5 of 18
+  in the 3Di tree. The difference is not significant (two-sided Fisher exact p = 0.19).
 
-So **both change**. It is not the case that 3Di reshuffles the phylogeny while leaving the
-evolutionary story intact, and here the structural characters imply less than half as many
-rearrangements.
-
-**Consistency check:** of the 9 cherries both trees found, 0 were classified differently.
-That has to be zero — the same pair of architectures must classify the same way whichever
-tree produced it — and it is reported rather than assumed, because a non-zero value would
-mean the classifier depends on something beyond the architectures.
+So the characters change which proteins end up as sisters. This run does not show that
+they change how many rearrangements are inferred.
 
 ## What is not established
 
-- Rates. Around twenty cherries per tree shows the event sets differ; it cannot estimate how
-  often each event occurs.
+- Whether the event difference is real. It is within what chance allows at this sample
+  size, and the complex class includes Pfam family swaps within the MFS clan (CL0015, for
+  example PF07690 and PF00083), which are label differences rather than rearrangements.
+- How much of the topology difference is noise. Two coarse NJ trees can differ from
+  resampled characters alone, and that baseline was not computed.
+- Rates. Around twenty cherries per tree cannot estimate how often each event occurs.
 - Anything phylogenetic. These are paralogues within one species, so the result is about how
   characters change an inference, not about the evolution of these families.
-- Anything about model-based inference. These trees are alignment-free and correspondingly
-  coarse.
 
 ## What would change the conclusion
 
 Model-based tree inference with the published 3Di substitution matrix, against a standard
-amino acid model. That would trade the shared-method guarantee for resolution, and the two
-runs together would separate "the characters differ" from "the models differ".
+amino acid model, with bootstrap support. That would trade the shared-method guarantee for
+resolution, and the two runs together would separate "the characters differ" from "the
+models differ". Collapsing Pfam families to clans would remove the family-swap events.
