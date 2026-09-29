@@ -34,8 +34,8 @@ def foldseek_binary() -> str:
     return os.environ.get("FOLDSEEK_BIN") or shutil.which("foldseek") or "foldseek"
 
 
-def check_foldseek(binary: str) -> None:
-    """Fail immediately if Foldseek cannot run.
+def check_foldseek(binary: str) -> str:
+    """Fail immediately if Foldseek cannot run, and return its version string.
 
     Without this the missing binary is discovered once per protein, every protein is
     skipped for the same reason, and the run dies complaining about having too few
@@ -56,6 +56,7 @@ def check_foldseek(binary: str) -> None:
         ) from exc
     if completed.returncode != 0:
         raise RuntimeError(f"foldseek at {binary!r} exited {completed.returncode}")
+    return completed.stdout.strip()
 
 
 def run(
@@ -71,7 +72,7 @@ def run(
     proteins = build_dataset(data_dir / "dataset.json", per_clade=per_clade)
 
     binary = foldseek_binary()
-    check_foldseek(binary)
+    foldseek_version = check_foldseek(binary)
     usable: list[Encoded] = []
     skipped: dict[str, str] = {}
     for protein in proteins:
@@ -151,6 +152,8 @@ def run(
             "min_confident_fraction": min_confident_fraction,
             "distance": "alignment-free 3-mer cosine, identical for both alphabets",
             "tree": "neighbour joining (Biopython)",
+            "domain_source": "InterPro/Pfam, live API",
+            "foldseek_version": foldseek_version,
         },
         "dataset": {
             "usable": len(usable),
@@ -162,6 +165,8 @@ def run(
             },
             "architectures_empty": sum(1 for value in architectures.values() if not value),
             "distinct_architectures": len(set(architectures.values())),
+            # The input manifest, so a rerun against a later UniProt release can be traced.
+            "accessions": names,
         },
         "topology": {
             "robinson_foulds": rf_absolute,

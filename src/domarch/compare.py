@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from math import comb
 
-from domarch.architecture import Event, classify, parse
+from domarch.architecture import PairEvent, classify_pair, parse
 
 
 @dataclass
@@ -25,10 +26,9 @@ class EventComparison:
     #: Event counts from the cherries each tree found.
     events_sequence: dict[str, int] = field(default_factory=dict)
     events_structure: dict[str, int] = field(default_factory=dict)
-    #: Cherries present in both trees where the two disagree on the event. Always zero --
-    #: the same pair of architectures classifies the same way whatever tree found it --
-    #: and reported because a non-zero value would mean the classifier is not a function
-    #: of the architectures alone.
+    #: Cherries present in both trees where the two disagree on the event. Zero by
+    #: construction, because the pair classifier is a function of the two architectures
+    #: only. Kept as a self-test of the code, not as a finding.
     conflicting_shared_cherries: int = 0
     #: Events inferred from one tree's cherries but not the other's.
     events_only_in_sequence: dict[str, int] = field(default_factory=dict)
@@ -42,16 +42,40 @@ class EventComparison:
 
 def events_from_cherries(
     pairs: list[tuple[str, str]], architectures: dict[str, str]
-) -> dict[tuple[str, str], Event]:
-    """Classify the architecture change across each sister pair."""
-    classified: dict[tuple[str, str], Event] = {}
+) -> dict[tuple[str, str], PairEvent]:
+    """Classify the architecture change across each sister pair, without a direction."""
+    classified: dict[tuple[str, str], PairEvent] = {}
     for left, right in pairs:
         if left not in architectures or right not in architectures:
             continue
-        before = parse(architectures[left])
-        after = parse(architectures[right])
-        classified[(left, right)] = classify(before, after)
+        key = (left, right) if left <= right else (right, left)
+        classified[key] = classify_pair(
+            parse(architectures[left]), parse(architectures[right])
+        )
     return classified
+
+
+def fisher_exact_two_sided(a: int, b: int, c: int, d: int) -> float:
+    """Two-sided Fisher exact p-value for the 2x2 table ``[[a, b], [c, d]]``.
+
+    Tables are summed when they are no more probable than the observed one, the same
+    convention as ``scipy.stats.fisher_exact``.
+    """
+    if min(a, b, c, d) < 0:
+        raise ValueError("counts must be non-negative")
+    row, col, n = a + b, a + c, a + b + c + d
+    if n == 0:
+        return 1.0
+
+    def probability(x: int) -> float:
+        return comb(row, x) * comb(n - row, col - x) / comb(n, col)
+
+    observed = probability(a)
+    low, high = max(0, col - (n - row)), min(row, col)
+    total = sum(
+        p for p in (probability(x) for x in range(low, high + 1)) if p <= observed * (1 + 1e-7)
+    )
+    return min(1.0, total)
 
 
 def compare_events(

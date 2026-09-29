@@ -9,7 +9,14 @@ from __future__ import annotations
 import pytest
 
 from domarch import structure
-from domarch.architecture import Event, classify, parse, repeat_expansion
+from domarch.architecture import (
+    Event,
+    PairEvent,
+    classify,
+    classify_pair,
+    parse,
+    repeat_expansion,
+)
 
 
 def test_identical_architectures_are_not_an_event() -> None:
@@ -50,6 +57,41 @@ def test_parse_rejects_empty_domains() -> None:
     assert parse("PF00083-PF07690") == ("PF00083", "PF07690")
     with pytest.raises(ValueError):
         parse("PF00083--PF07690")
+
+
+def test_parse_reads_no_domains_as_an_empty_architecture() -> None:
+    assert parse("") == ()
+
+
+_ARCHITECTURES = [
+    (),
+    ("A",),
+    ("B",),
+    ("A", "B"),
+    ("A", "B", "C"),
+    ("C", "A", "B"),
+    ("A", "B", "B", "C"),
+    ("A", "Z", "B", "C"),
+    ("C", "B", "A"),
+]
+
+
+@pytest.mark.parametrize("a", _ARCHITECTURES)
+@pytest.mark.parametrize("b", _ARCHITECTURES)
+def test_pair_classification_does_not_depend_on_order(
+    a: tuple[str, ...], b: tuple[str, ...]
+) -> None:
+    """Sister paralogues have no polarity, so swapping them must not change the event."""
+    assert classify_pair(a, b) is classify_pair(b, a)
+
+
+def test_pair_events_merge_the_two_directions() -> None:
+    assert classify_pair(("A", "B"), ("A", "B", "C")) is PairEvent.TERMINAL_INDEL
+    assert classify_pair(("A", "B", "C"), ("A", "B")) is PairEvent.TERMINAL_INDEL
+    assert classify_pair(("A", "C"), ("A", "B", "C")) is PairEvent.INTERNAL_INDEL
+    assert classify_pair(("A", "B", "C"), ("A", "B", "B", "C")) is PairEvent.INTERNAL_INDEL
+    assert classify_pair(("A",), ("B",)) is PairEvent.COMPLEX
+    assert classify_pair((), ("A",)) is PairEvent.TERMINAL_INDEL
 
 
 def test_low_confidence_residues_are_masked_not_trusted() -> None:

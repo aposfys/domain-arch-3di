@@ -5,15 +5,33 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from domarch.compare import fisher_exact_two_sided
+
+#: Event names as findings files store them, mapped to undirected labels. Sister paralogues
+#: have no direction without an outgroup, so the directional names written by earlier runs
+#: are merged into the same classes the current classifier emits.
 EVENT_LABELS = {
     "IDENTITY": "no change",
-    "TERMINAL_ADDITION": "terminal addition",
-    "TERMINAL_DELETION": "terminal deletion",
-    "INTERNAL_INSERTION": "internal insertion",
-    "INTERNAL_DELETION": "internal deletion",
-    "DUPLICATION": "duplication",
+    "TERMINAL_INDEL": "terminal indel",
+    "TERMINAL_ADDITION": "terminal indel",
+    "TERMINAL_DELETION": "terminal indel",
+    "INTERNAL_INDEL": "internal indel",
+    "INTERNAL_INSERTION": "internal indel",
+    "INTERNAL_DELETION": "internal indel",
+    "INTERNAL_DUPLICATION": "internal indel",
+    "DUPLICATION": "internal indel",
     "COMPLEX": "complex",
 }
+LABEL_ORDER = ("no change", "terminal indel", "internal indel", "complex")
+
+
+def merge_events(counts: dict[str, int]) -> dict[str, int]:
+    """Event counts keyed by undirected label, in a fixed order."""
+    merged: dict[str, int] = dict.fromkeys(LABEL_ORDER, 0)
+    for name, count in counts.items():
+        label = EVENT_LABELS.get(name, name.lower())
+        merged[label] = merged.get(label, 0) + count
+    return merged
 
 
 def render(findings: dict) -> str:
@@ -25,7 +43,7 @@ def render(findings: dict) -> str:
 
     lines.append("# Results\n")
     lines.append(
-        f"{dataset['usable']} proteins across two clades "
+        f"A pilot run. {dataset['usable']} proteins across two clades "
         f"({', '.join(f'{k} {v}' for k, v in dataset['per_clade'].items())}), "
         f"{dataset['distinct_architectures']} distinct domain architectures.\n"
     )
@@ -35,87 +53,100 @@ def render(findings: dict) -> str:
     lines.append("| --- | --- |")
     for clade in config["clades"]:
         lines.append(
-            f"| {clade['clade'].title()} | {clade['interpro']} — {clade['description']} |"
+            f"| {clade['clade'].title()} | {clade['interpro']}, {clade['description']} |"
         )
     lines.append(f"| Characters | amino acid vs 3Di, {config['distance']} |")
     lines.append(f"| Tree | {config['tree']} |")
     lines.append(
-        f"| Masking | residues below pLDDT {config['plddt_threshold']:.0f} masked; "
+        f"| Masking | residues below pLDDT {config['plddt_threshold']:.0f} masked, "
         f"proteins below {config['min_confident_fraction']:.0%} confident excluded |"
     )
     lines.append(f"| Excluded | {dataset['skipped']} proteins |")
+    if config.get("foldseek_version"):
+        lines.append(f"| Foldseek | {config['foldseek_version']} |")
     lines.append("")
 
-    lines.append("## The topology changes\n")
+    lines.append("## Topology\n")
     lines.append(
         f"Robinson-Foulds distance **{topology['robinson_foulds']}**, normalised "
-        f"**{topology['robinson_foulds_normalised']:.3f}**. Roughly three-quarters of the "
-        "bipartitions in one tree are absent from the other, so switching from amino acids "
-        "to 3Di is not a small perturbation of the phylogeny.\n"
+        f"**{topology['robinson_foulds_normalised']:.3f}**. Most of the non-trivial splits "
+        "in one tree are absent from the other. There is no bootstrap or resampling "
+        "baseline, so how much two alignment-free neighbour-joining trees differ from noise "
+        "alone is not known.\n"
     )
 
-    lines.append("## And so do the events\n")
+    lines.append("## Events\n")
     lines.append(
-        "Events are read off sister pairs (cherries), which is the one place two extant "
-        "architectures can be compared without reconstructing an ancestor.\n"
+        "Events are read off sister pairs (cherries), the one place two extant "
+        "architectures can be compared without reconstructing an ancestor. Sister "
+        "paralogues have no direction without an outgroup, so an indel is not split into "
+        "an addition and a deletion.\n"
     )
+    sequence = merge_events(events["events_sequence"])
+    structure = merge_events(events["events_structure"])
+    n_sequence = events["n_cherries_sequence"]
+    n_structure = events["n_cherries_structure"]
     lines.append("| | Sequence tree | Structure tree |")
     lines.append("| --- | ---: | ---: |")
-    lines.append(
-        f"| Cherries | {events['n_cherries_sequence']} | {events['n_cherries_structure']} |"
-    )
-    all_events = sorted(set(events["events_sequence"]) | set(events["events_structure"]))
-    for name in all_events:
-        lines.append(
-            f"| {EVENT_LABELS.get(name, name)} "
-            f"| {events['events_sequence'].get(name, 0)} "
-            f"| {events['events_structure'].get(name, 0)} |"
-        )
+    lines.append(f"| Cherries | {n_sequence} | {n_structure} |")
+    for label in sequence:
+        lines.append(f"| {label} | {sequence[label]} | {structure.get(label, 0)} |")
     lines.append("")
 
-    non_identity_sequence = sum(
-        count for name, count in events["events_sequence"].items() if name != "IDENTITY"
+    changed_sequence = n_sequence - sequence["no change"]
+    changed_structure = n_structure - structure["no change"]
+    p_value = fisher_exact_two_sided(
+        changed_sequence, sequence["no change"], changed_structure, structure["no change"]
     )
-    non_identity_structure = sum(
-        count for name, count in events["events_structure"].items() if name != "IDENTITY"
-    )
-    lines.append(
-        f"**The sequence tree implies {non_identity_sequence} rearrangement events; the "
-        f"structure tree implies {non_identity_structure}.** Only "
-        f"{events['shared_cherries']} sister pairs are shared between the two trees, a "
-        f"Jaccard of {events['cherry_jaccard']:.2f}.\n"
+    verdict = (
+        "The difference is not significant"
+        if p_value >= 0.05
+        else "The difference is nominally significant"
     )
     lines.append(
-        "So the answer to the question this repository asks is that **both change**. It is "
-        "not the case that 3Di reshuffles the tree while leaving the evolutionary story "
-        "intact — the set of inferred rearrangements moves too, and in this dataset the "
-        "structural characters imply substantially fewer of them.\n"
+        f"The sequence tree's cherries show {changed_sequence} architecture changes out of "
+        f"{n_sequence}, the structure tree's {changed_structure} out of {n_structure}. "
+        f"{verdict} (two-sided Fisher exact p = {p_value:.2f}, treating cherries as "
+        "independent, which overstates the evidence because the two trees share "
+        f"{events['shared_cherries']} of them). Only {events['shared_cherries']} sister "
+        f"pairs are shared between the trees, a Jaccard of {events['cherry_jaccard']:.2f}.\n"
+    )
+    lines.append(
+        "So the two alphabets give different trees and largely different sister pairs. "
+        "Whether they imply different numbers of rearrangements is not settled by this run.\n"
     )
 
+    lines.append("## Limitations\n")
     lines.append(
-        f"A consistency check: of the {events['shared_cherries']} cherries both trees "
-        f"found, **{events['conflicting_shared_cherries']} were classified differently**. "
-        "That number has to be zero — the same pair of architectures must classify the "
-        "same way whichever tree produced it — and it is reported rather than assumed, "
-        "because a non-zero value would mean the classifier depends on something other "
-        "than the architectures.\n"
-    )
-
-    lines.append("## Limitations, stated plainly\n")
-    lines.append(
+        "- **Complex includes Pfam family swaps.** Pfam splits the MFS clan (CL0015) into "
+        "several families, for example PF07690 (MFS_1) and PF00083 (Sugar_tr). Two "
+        "single-domain MFS proteins with different family calls count as complex although "
+        "no domain was gained, lost or moved, so the complex counts may overstate real "
+        "rearrangements.\n"
         "- **Alignment-free distances are coarse.** Both alphabets go through an identical "
         "3-mer cosine distance, which removes the confound of comparing two substitution "
-        "matrices that were never calibrated against each other. The cost is resolution: "
-        "these trees are weaker than a model-based inference would give, and the RF "
+        "matrices that were never calibrated against each other. The cost is resolution. "
+        "These trees are weaker than a model-based inference would give, and the RF "
         "distance is correspondingly noisier.\n"
-        "- **Cherries are a small sample.** Around twenty sister pairs per tree is enough "
-        "to show the event sets differ and not enough to estimate rates.\n"
+        "- **Cherries are a small sample.** Around twenty sister pairs per tree is too few "
+        "to estimate rates or to separate a modest difference from chance.\n"
         "- **Two human clades, not a phylogeny.** These are paralogues within one species. "
         "The result is about how characters change an inference, not about the evolution "
-        "of these families.\n"
-        f"- **{dataset['architectures_empty']} proteins carry no Pfam domain at all**, and "
-        "contribute only identity events."
+        "of these families."
     )
+    if not dataset.get("accessions"):
+        lines.append(
+            "- **Inputs not recorded.** This run did not record its accession list or the "
+            "UniProt, InterPro and Foldseek releases. The protein set is the first "
+            f"{config['per_clade_requested']} UniProt hits per clade, which depends on the "
+            "release, so a rerun can give different numbers."
+        )
+    if dataset["architectures_empty"]:
+        lines.append(
+            f"- **{dataset['architectures_empty']} proteins carry no Pfam domain.** A "
+            "cherry pairing one of them with a domain-carrying protein counts as a "
+            "terminal indel."
+        )
     lines.append("")
     return "\n".join(lines)
 

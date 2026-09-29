@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from domarch import trees
-from domarch.compare import compare_events
+from domarch.compare import compare_events, fisher_exact_two_sided
 
 
 def test_kmer_profile_skips_windows_touching_a_mask():
@@ -67,9 +67,31 @@ def test_cherries_finds_sister_leaf_pairs():
     assert sorted(trees.cherries(tree)) == [("a", "b"), ("c", "d"), ("e", "f")]
 
 
+def test_robinson_foulds_ignores_where_the_root_sits():
+    """Neighbour joining roots arbitrarily, so a re-rooted copy is the same tree."""
+    rooted_one_way = _tree("(((a,b),(c,d)),(e,f),(g,h));")
+    rooted_another = _tree("((a,b),((c,d),((e,f),(g,h))));")
+    rooted_at_a_leaf = _tree("(a,b,((c,d),((e,f),(g,h))));")
+    assert trees.robinson_foulds(rooted_one_way, rooted_another) == (0, 0.0)
+    assert trees.robinson_foulds(rooted_one_way, rooted_at_a_leaf) == (0, 0.0)
+    assert len(trees.splits(rooted_one_way)) == 8 - 3
+
+
 def test_cherries_ignores_a_node_with_a_non_leaf_child():
-    tree = _tree("((a,(b,c)),d);")
-    assert trees.cherries(tree) == [("b", "c")]
+    tree = _tree("((a,(b,c)),(d,e));")
+    assert sorted(trees.cherries(tree)) == [("b", "c"), ("d", "e")]
+
+
+def test_cherries_include_a_pair_on_a_trifurcating_root():
+    """Biopython's neighbour joining leaves three children on the root."""
+    tree = _tree("(a,b,((c,d),e));")
+    assert sorted(trees.cherries(tree)) == [("a", "b"), ("c", "d")]
+
+
+def test_cherries_do_not_depend_on_where_the_root_sits():
+    one = _tree("(((a,b),(c,d)),(e,f),(g,h));")
+    other = _tree("(a,b,((c,d),((e,f),(g,h))));")
+    assert sorted(trees.cherries(one)) == sorted(trees.cherries(other))
 
 
 def test_the_same_pair_classifies_the_same_way_in_either_tree():
@@ -88,6 +110,29 @@ def test_disjoint_cherry_sets_share_nothing():
     comparison = compare_events([("a", "b")], [("c", "d")], architectures)
     assert comparison.shared_cherries == 0
     assert comparison.cherry_jaccard == pytest.approx(0.0)
+
+
+def test_proteins_without_domains_are_compared_not_rejected():
+    architectures = {"a": "", "b": "", "c": "PF1", "d": ""}
+    comparison = compare_events([("a", "b"), ("c", "d")], [], architectures)
+    assert comparison.events_sequence == {"IDENTITY": 1, "TERMINAL_INDEL": 1}
+
+
+def test_a_cherry_is_the_same_pair_in_either_order():
+    architectures = {"a": "PF1", "b": "PF1-PF2"}
+    comparison = compare_events([("a", "b")], [("b", "a")], architectures)
+    assert comparison.shared_cherries == 1
+    assert comparison.events_sequence == comparison.events_structure
+
+
+def test_fisher_exact_matches_known_values():
+    # Fisher's tea-tasting table.
+    assert fisher_exact_two_sided(3, 1, 1, 3) == pytest.approx(0.4857, abs=1e-4)
+    # The committed run, events against no change per tree.
+    assert fisher_exact_two_sided(11, 10, 5, 13) == pytest.approx(0.1923, abs=1e-4)
+    assert fisher_exact_two_sided(0, 0, 0, 0) == 1.0
+    with pytest.raises(ValueError):
+        fisher_exact_two_sided(-1, 0, 0, 0)
 
 
 def test_cherries_over_absent_architectures_are_skipped_not_guessed():

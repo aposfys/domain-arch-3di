@@ -94,18 +94,25 @@ def neighbour_joining(distances: DistanceMatrix):
 
 
 def splits(tree) -> set[frozenset[str]]:
-    """The set of non-trivial bipartitions a tree induces.
+    """The set of non-trivial bipartitions a tree induces, read as an unrooted tree.
 
     Two unrooted trees have the same topology exactly when their split sets match, which is
-    what makes this the basis of the Robinson-Foulds comparison.
+    what makes this the basis of the Robinson-Foulds comparison. Neighbour joining places
+    the root arbitrarily, so each split is stored as the side that excludes a fixed
+    reference leaf. Without that, the same bipartition read from differently rooted copies
+    of one tree could be stored as two different subsets.
     """
-    leaves = {leaf.name for leaf in tree.get_terminals()}
+    leaves = frozenset(leaf.name for leaf in tree.get_terminals())
+    if not leaves:
+        return set()
+    reference = min(leaves)
     found: set[frozenset[str]] = set()
     for clade in tree.get_nonterminals():
         subset = frozenset(leaf.name for leaf in clade.get_terminals())
-        # Trivial splits (everything, or a single leaf) carry no topological information.
-        if 1 < len(subset) < len(leaves) - 1:
-            found.add(subset)
+        side = leaves - subset if reference in subset else subset
+        # Trivial splits (a single leaf against the rest) carry no topological information.
+        if 1 < len(side) < len(leaves) - 1:
+            found.add(side)
     return found
 
 
@@ -122,18 +129,40 @@ def robinson_foulds(tree_a, tree_b) -> tuple[int, float]:
 
 
 def cherries(tree) -> list[tuple[str, str]]:
-    """Sister leaf pairs.
+    """Sister leaf pairs of the tree, read as an unrooted tree.
 
     A cherry is the one place in a tree where two extant architectures can be compared
     without reconstructing an ancestor. Restricting the event comparison to cherries keeps
     it free of an ancestral-state model whose assumptions would otherwise be doing part of
     the work.
+
+    A cherry is an internal node with exactly two leaf neighbours. Neighbour joining
+    returns a trifurcating root, so the root is treated like any other node, and a
+    bifurcating root is suppressed by joining its two children.
     """
+    root = tree.root
+    neighbours: dict[int, list] = {}
+
+    def link(a, b) -> None:
+        neighbours.setdefault(id(a), []).append(b)
+        neighbours.setdefault(id(b), []).append(a)
+
+    root_children = list(root.clades)
+    for clade in tree.find_clades(order="preorder"):
+        for child in clade.clades:
+            if clade is root and len(root_children) == 2:
+                continue
+            link(clade, child)
+    if len(root_children) == 2:
+        link(root_children[0], root_children[1])
+
     pairs: list[tuple[str, str]] = []
     for clade in tree.get_nonterminals():
-        children = clade.clades
-        terminals = [child for child in children if child.is_terminal()]
-        if len(terminals) == 2 and len(children) == 2:
-            names = sorted(child.name for child in terminals)
-            pairs.append((names[0], names[1]))
+        if clade is root and len(root_children) == 2:
+            continue
+        adjacent = neighbours.get(id(clade), [])
+        leaves = sorted(node.name for node in adjacent if node.is_terminal())
+        # Three leaf neighbours only happens in a three-leaf tree, where no pair is special.
+        if len(leaves) == 2:
+            pairs.append((leaves[0], leaves[1]))
     return pairs

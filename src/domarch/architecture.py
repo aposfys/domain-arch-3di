@@ -58,6 +58,39 @@ def classify(before: Architecture, after: Architecture) -> Event:
     return Event.COMPLEX
 
 
+class PairEvent(Enum):
+    """The minimal change separating two sister architectures, without a direction.
+
+    Two sister paralogues have no ancestor-descendant order unless an outgroup supplies
+    one, so an addition in one reading is a deletion in the other. The pair events merge
+    each direction into one class, and a duplication into an internal indel.
+    """
+
+    IDENTITY = "identity"
+    TERMINAL_INDEL = "terminal_indel"
+    INTERNAL_INDEL = "internal_indel"
+    COMPLEX = "complex"
+
+
+_PAIR_EVENT = {
+    Event.IDENTITY: PairEvent.IDENTITY,
+    Event.TERMINAL_ADDITION: PairEvent.TERMINAL_INDEL,
+    Event.TERMINAL_DELETION: PairEvent.TERMINAL_INDEL,
+    Event.INTERNAL_DUPLICATION: PairEvent.INTERNAL_INDEL,
+    Event.INTERNAL_INSERTION: PairEvent.INTERNAL_INDEL,
+    Event.INTERNAL_DELETION: PairEvent.INTERNAL_INDEL,
+    Event.COMPLEX: PairEvent.COMPLEX,
+}
+
+
+def classify_pair(a: Architecture, b: Architecture) -> PairEvent:
+    """Classify the change between two unpolarised architectures.
+
+    The result does not depend on the order of the arguments.
+    """
+    return _PAIR_EVENT[classify(a, b)]
+
+
 def repeat_expansion(architecture: Architecture) -> dict[str, int]:
     """Count consecutive repeats per domain, which is how repeat families actually grow."""
     counts: dict[str, int] = {}
@@ -76,7 +109,12 @@ def repeat_expansion(architecture: Architecture) -> dict[str, int]:
 
 
 def parse(architecture: str, *, separator: str = "-") -> Architecture:
-    """Parse ``PF00083-PF07690`` into a tuple, rejecting empty components."""
+    """Parse ``PF00083-PF07690`` into a tuple, rejecting empty components.
+
+    An empty string is a protein with no Pfam domain and parses to an empty tuple.
+    """
+    if not architecture.strip():
+        return ()
     parts = tuple(part.strip() for part in architecture.split(separator))
     if any(not part for part in parts):
         raise ValueError(f"empty domain in architecture {architecture!r}")

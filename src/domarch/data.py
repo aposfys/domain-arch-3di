@@ -4,15 +4,17 @@ Two clades, and the pairing is the experiment. A transporter family is where dom
 rearrangement is claimed to be most active; a globular family is the control, where a
 change in the inferred events would be much harder to attribute to biology.
 
-Domain assignments come from InterPro at a pinned database version. An architecture is
-only defined relative to a stated source -- Pfam and InterPro disagree, and "the domain
-architecture" is not a database-independent fact.
+Domain assignments come from the live InterPro API, and the release is not recorded. An
+architecture is only defined relative to a stated source (Pfam and InterPro disagree, and
+"the domain architecture" is not a database-independent fact), so a rerun against a later
+release can change the dataset.
 """
 
 from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -44,13 +46,28 @@ class Protein:
         return "-".join(self.domains)
 
 
+class NotFound(RuntimeError):
+    """The server answered, and the resource does not exist (HTTP 404)."""
+
+
 def _get(url: str, attempts: int = 5) -> dict:
+    """GET a JSON payload, retrying transient failures.
+
+    A 404 is an answer rather than a failure, so it raises ``NotFound`` at once. An empty
+    body (InterPro answers 204 when nothing matches) is an empty payload.
+    """
     last: Exception | None = None
     for attempt in range(attempts):
         try:
             request = urllib.request.Request(url, headers={"Accept": "application/json"})
             with urllib.request.urlopen(request, timeout=120) as response:
-                return json.loads(response.read().decode("utf-8"))
+                body = response.read().decode("utf-8")
+                return json.loads(body) if body.strip() else {}
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise NotFound(url) from exc
+            last = exc
+            time.sleep(2**attempt)
         except Exception as exc:
             last = exc
             time.sleep(2**attempt)
@@ -97,10 +114,10 @@ def fetch_architecture(accession: str) -> list[str]:
     url = f"{INTERPRO_API}/entry/pfam/protein/uniprot/{accession}/?page_size=100"
     try:
         payload = _get(url)
-    except RuntimeError:
-        # A protein with no Pfam match returns 404. That is an empty architecture, not a
-        # failure, and it must not be silently confused with a fetch that went wrong --
-        # so the caller sees an empty list and the count of these is reported.
+    except NotFound:
+        # A protein with no Pfam match returns 404 (or an empty 204). That is an empty
+        # architecture, and the count of these is reported. Any other failure propagates,
+        # so a fetch that went wrong is never recorded as a protein without domains.
         return []
 
     placed: list[tuple[int, str]] = []
@@ -117,7 +134,7 @@ def fetch_architecture(accession: str) -> list[str]:
 
 
 def build_dataset(
-    out_path: Path, *, per_clade: int = 40, pinned_note: str = "InterPro/Pfam, live"
+    out_path: Path, *, per_clade: int = 40, source_note: str = "InterPro/Pfam, live"
 ) -> list[Protein]:
     """Fetch both clades with their architectures, cached."""
     if out_path.exists():
@@ -136,7 +153,7 @@ def build_dataset(
     out_path.write_text(
         json.dumps(
             {
-                "source": pinned_note,
+                "source": source_note,
                 "clades": [
                     {"clade": clade, "interpro": accession, "description": description}
                     for clade, accession, description in CLADES
